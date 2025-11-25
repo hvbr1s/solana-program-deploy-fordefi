@@ -7,3 +7,5 @@ test-ledger
 .yarn
 secret/
 package-lock.json
+.env
+fordefi_secret
