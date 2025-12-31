@@ -9,3 +9,4 @@ secret/
 package-lock.json
 .env
 fordefi_secret
+bin/
