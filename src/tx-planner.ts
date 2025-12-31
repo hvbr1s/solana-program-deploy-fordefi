@@ -6,23 +6,24 @@ import * as system from '@solana-program/system';
 import * as loader from '@solana-program/loader-v3';
 
 
-// our tx plan, a in this case a batch that will execute atomically
 export async function createTxPlan(fordefiConfig: FordefiSolanaConfig, client: Client) {
     const deployerVault = kit.address(fordefiConfig.deployerVaultAddress);
     const deployerVaultSigner = kit.createNoopSigner(deployerVault);
 
     // Load buffer keypair
     const bufferKeypairBytes = new Uint8Array(JSON.parse(fs.readFileSync('buffer-keypair.json', 'utf-8')));
-    const bufferKeypair = await kit.createKeyPairFromBytes(bufferKeypairBytes);
     const bufferSigner = await kit.createKeyPairSignerFromBytes(bufferKeypairBytes);
 
     const dataSize = new Uint8Array(fs.readFileSync('target/deploy/solana_deploy_contract_fordefi.so'))
     console.log(`Data size: ${dataSize.length}`)
 
-    const bufferSize = dataSize.length+37;
+    const bufferSize = dataSize.length+37; // 37 is the Buffer header size
     const lamports = await client.rpc.getMinimumBalanceForRentExemption(BigInt(bufferSize)).send();
 
-    const ixs = [
+    const ixs = [];
+
+    // create buffer account and initialize buffer
+    ixs.push(
       system.getCreateAccountInstruction({
         payer: deployerVaultSigner,
         newAccount: bufferSigner,
@@ -34,8 +35,38 @@ export async function createTxPlan(fordefiConfig: FordefiSolanaConfig, client: C
         bufferAuthority: deployerVault,
         sourceAccount: bufferSigner.address
       })
-    ]
+    );
 
+    // write to buffer in chunks
+    // max tx size is 1232 bytes, need room for header, signatures, accounts, etc.
+    const chunkSize = 900;
+    let offset = 0;
+    const writeBufferIxs = [];
+    while (offset < dataSize.length) {
+      const chunk = dataSize.slice(offset, offset + chunkSize);
+      writeBufferIxs.push(
+        loader.getWriteInstruction({
+          bufferAccount: bufferSigner.address,
+          bufferAuthority: deployerVaultSigner,
+          offset,
+          bytes: chunk,
+        })
+      );
+      offset += chunkSize;
+    }
+
+    // fix write instructions - loader-v3 library bug requires 4 bytes padding after first 12 bytes
+    const fixedWriteIxs = writeBufferIxs.map(ix => {
+      const newData = new Uint8Array([
+        ...ix.data!.subarray(0, 12),
+        ...[0, 0, 0, 0],
+        ...ix.data!.subarray(12, ix.data!.length)
+      ]);
+      return { ...ix, data: newData };
+    });
+
+    ixs.push(...fixedWriteIxs);
+    console.log(`Created ${ixs.length} instructions (2 setup + ${ixs.length - 2} writes)`)
 
     // create instruction plan - this will auto-split if needed
     const instructionPlan = kit.sequentialInstructionPlan(ixs);
