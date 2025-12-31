@@ -23,8 +23,6 @@ async function main(): Promise<void> {
       const rawSignedTxBase64 = await signWithFordefi(message, solana_client.rpc);
       console.log('Transaction signed by Fordefi MPC 🖋️✅');
 
-      // Broadcast via RPC directly (the transaction is already fully signed)
-      // Fordefi returns base64, so we need to specify the encoding
       console.log('Broadcasting transaction...');
       const txSignature = await solana_client.rpc.sendTransaction(
         rawSignedTxBase64 as kit.Base64EncodedWireTransaction,
@@ -54,26 +52,14 @@ async function main(): Promise<void> {
       const result = error.context.transactionPlanResult as kit.TransactionPlanResult;
       console.error('Transaction plan result:', JSON.stringify(result, null, 2));
     }
-
-    // Log the cause chain
     if (error.cause) {
       console.error('\nCause:', error.cause.message || error.cause);
       if (error.cause.context) {
         console.error('Cause context:', JSON.stringify(error.cause.context, null, 2));
       }
     }
-
-    // Log error code if present
     if (error.context?.__code) {
       console.error('\nError code:', error.context.__code);
-    }
-
-    // Common error explanations
-    if (error.cause?.message?.includes('signature verification')) {
-      console.error('\n💡 Hint: "Signature verification failure" usually means:');
-      console.error('   - A required signer did not sign the transaction');
-      console.error('   - Check that all signers (fee payer + newAccount signers) are signing');
-      console.error('   - The bufferSigner needs to sign in addition to Fordefi');
     }
 
     throw error;
