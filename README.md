@@ -1,6 +1,6 @@
-# Solana Program Deployment with Fordefi MPC
+# Solana Program Deployment with Fordefi
 
-This project demonstrates how to deploy Solana (Anchor) programs using Fordefi's MPC wallet for signing. The deployment process involves creating a buffer, uploading program bytes in chunks, and deploying the buffer as an upgradeable program.
+This project demonstrates how to deploy Solana (Anchor) programs using Fordefi for signing. The deployment process involves creating a buffer, uploading program bytes in chunks, and deploying the buffer as an upgradeable program.
 
 ## Prerequisites
 
@@ -15,8 +15,8 @@ This project demonstrates how to deploy Solana (Anchor) programs using Fordefi's
 Create a `.env` file with your Fordefi credentials:
 
 ```env
-FORDEFI_API_TOKEN=your_api_token
-FORDEFI_VAULT_ID=your_vault_id
+FORDEFI_API_TOKEN=your_api_user_token
+FORDEFI_VAULT_ID=your_solana_vault_id
 FORDEFI_VAULT_ADDRESS=your_solana_vault_address
 ```
 
@@ -38,25 +38,26 @@ All deployment settings are centralized in `src/config.ts`:
 ## Project Structure
 
 ```
-├── programs/                    # Anchor program source
+├── programs/                          # Anchor program source
 ├── src/
-│   ├── config.ts               # Fordefi configuration
-│   ├── tx-planner.ts           # Transaction planning (buffer + deploy)
-│   ├── signers.ts              # Fordefi signing logic
-│   ├── run.ts                  # Main deployment script
-│   ├── close-buffer.ts         # Utility to close failed buffers
-│   ├── process-tx.ts           # Fordefi API helpers
-│   └── solana-client-utils.ts  # Solana RPC client
-├── buffer-keypair.json         # Keypair for the buffer account
-├── program-keypair.json        # Keypair for the program ID
-└── target/deploy/*.so          # Compiled program binary
+│   ├── config.ts                      # Fordefi configuration to modify
+│   ├── tx-planner.ts                  # Transaction planning (buffer + deploy)
+│   ├── signers.ts                     # Fordefi signing logic
+│   ├── run.ts                         # Main deployment script
+│   ├── process-tx.ts                  # Fordefi API helpers
+│   └── utils/
+│       ├── solana-client-util.ts      # Solana RPC client
+│       └── close-buffer-util.ts       # Utility to close failed buffers
+├── buffer-keypair.json                # Keypair for the buffer account
+├── program-keypair.json               # Keypair for the program ID
+└── target/deploy/*.so                 # Compiled program binary
 ```
 
 ## Deployment Flow
 
 ### 1. Generate Keypairs
 
-Generate fresh keypairs for the buffer and program:
+Grind fresh keypairs for the buffer and program:
 
 ```bash
 solana-keygen new --no-bip39-passphrase -o buffer-keypair.json --force
@@ -137,7 +138,7 @@ solana-keygen new --no-bip39-passphrase -o program-keypair.json --force
 
 Then update `declare_id!` in `lib.rs` and rebuild with `anchor build`.
 
-## Transaction Breakdown
+## Transaction Breakdown for our demo Anchor program
 
 For a ~190KB program:
 
@@ -158,54 +159,3 @@ For a ~190KB program:
 | Transaction fees | ~0.001 SOL | With custom 5000 lamport fee |
 | **Total** | **~2.7 SOL** | Actual rent ~1.4 SOL |
 
-## Troubleshooting
-
-### "account already in use"
-Generate fresh keypairs and rebuild.
-
-### "Blockhash not found"
-The retry logic should handle this automatically. If persistent, check your network connection.
-
-### "Failed to parse ELF file"
-Ensure the padding fix is NOT applied to write instructions. Check `tx-planner.ts`.
-
-### "insufficient funds"
-1. Check your Fordefi vault balance
-2. Ensure custom fees are configured (not Fordefi's default estimation)
-3. Close any orphaned buffers to recover rent
-
-### Failed deployment mid-way
-1. Note the buffer address from logs
-2. Run `npx tsx src/close-buffer.ts BUFFER_ADDRESS`
-3. Generate fresh keypairs
-4. Update `declare_id!` and rebuild
-5. Try again
-
-## Fordefi API Notes
-
-The Fordefi transaction payload structure for Solana:
-
-```typescript
-{
-  vault_id: "...",
-  signer_type: "api_signer",
-  sign_mode: "auto",
-  type: "solana_transaction",
-  details: {
-    type: "solana_serialized_transaction_message",
-    push_mode: "manual",      // We broadcast ourselves
-    chain: "solana_devnet",   // or "solana_mainnet"
-    data: base64EncodedMessage,
-    signatures: [...],
-    skip_prediction: true,    // Speeds up signing
-    fee: {
-      type: "custom",
-      unit_price: "5000"      // IMPORTANT: prevents fee explosion
-    }
-  }
-}
-```
-
-## License
-
-MIT
