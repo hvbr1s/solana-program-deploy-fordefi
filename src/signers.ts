@@ -13,9 +13,14 @@ export async function signPayloadWithApiUserPrivateKey(payload: string, privateK
   return signature
 }
 
+// Custom fee in lamports - 5000 lamports = 0.000005 SOL (base fee)
+// For 212 transactions: 212 * 5000 = 1,060,000 lamports = ~0.001 SOL total
+const DEFAULT_FEE_LAMPORTS = "5000";
+
 export async function signWithFordefi(
   message: kit.BaseTransactionMessage & kit.TransactionMessageWithFeePayer,
-  rpc: ReturnType<typeof kit.createSolanaRpc>
+  rpc: ReturnType<typeof kit.createSolanaRpc>,
+  customFeeLamports?: string
 ): Promise<string> {
   const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
   const messageWithBlockhash = kit.setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, message);
@@ -49,6 +54,8 @@ export async function signWithFordefi(
 
   console.log(`Signatures array: ${signatures.length} entries (1 Fordefi + ${signatures.length - 1} local)`);
 
+  const feeLamports = customFeeLamports || DEFAULT_FEE_LAMPORTS;
+
   const jsonBody = {
     vault_id: fordefiConfig.deployerVaultId,
     signer_type: "api_signer",
@@ -60,7 +67,11 @@ export async function signWithFordefi(
       chain: "solana_devnet",
       data: base64EncodedData,
       signatures: signatures,
-      skip_prediction: true // speeds up signing but causes policy mismatch
+      skip_prediction: true, // speeds up signing but causes policy mismatch
+      fee: {
+        type: "custom",
+        unit_price: feeLamports
+      }
     }
   };
 

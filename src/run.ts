@@ -12,35 +12,73 @@ async function main(): Promise<void> {
   const solana_client: Client = await createClient();
   const transactionPlan = await createTxPlan(fordefiConfig, solana_client);
 
-  // Create executor that uses Fordefi for signing
+  // Track transaction count for progress
+  let currentTx = 0;
+
+  // Create executor that uses Fordefi for signing with retry logic
   const transactionPlanExecutor = kit.createTransactionPlanExecutor({
     executeTransactionMessage: async (
       message: kit.BaseTransactionMessage & kit.TransactionMessageWithFeePayer,
     ) => {
-      console.log('Signing transaction with Fordefi...');
+      currentTx++;
+      const maxRetries = 3;
+      let lastError: any;
 
-      // Sign with Fordefi (includes getting blockhash)
-      const rawSignedTxBase64 = await signWithFordefi(message, solana_client.rpc);
-      console.log('Transaction signed by Fordefi MPC 🖋️✅');
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`\n[TX ${currentTx}] Signing with Fordefi (attempt ${attempt}/${maxRetries})...`);
 
-      console.log('Broadcasting transaction...');
-      const txSignature = await solana_client.rpc.sendTransaction(
-        rawSignedTxBase64 as kit.Base64EncodedWireTransaction,
-        {
-          skipPreflight: false,
-          preflightCommitment: 'confirmed',
-          encoding: 'base64'
+          // Sign with Fordefi (gets fresh blockhash each attempt)
+          const rawSignedTxBase64 = await signWithFordefi(message, solana_client.rpc);
+          console.log(`[TX ${currentTx}] Signed by Fordefi MPC 🖋️✅`);
+
+          console.log(`[TX ${currentTx}] Broadcasting...`);
+          const txSignature = await solana_client.rpc.sendTransaction(
+            rawSignedTxBase64 as kit.Base64EncodedWireTransaction,
+            {
+              skipPreflight: false,
+              preflightCommitment: 'confirmed',
+              encoding: 'base64'
+            }
+          ).send();
+
+          console.log(`[TX ${currentTx}] Broadcast 📡 Signature: ${txSignature}`);
+
+          const txBytes = Buffer.from(rawSignedTxBase64, 'base64');
+          const transaction = kit.getTransactionDecoder().decode(txBytes);
+
+          return { transaction };
+        } catch (error: any) {
+          lastError = error;
+          const errorMsg = error?.cause?.message || error?.message || '';
+
+          // Check if it's a blockhash expiry error
+          if (errorMsg.includes('Blockhash not found') || errorMsg.includes('blockhash')) {
+            console.log(`[TX ${currentTx}] Blockhash expired, retrying with fresh blockhash...`);
+            continue;
+          }
+
+          // For other errors, throw immediately
+          throw error;
         }
-      ).send();
+      }
 
-      console.log(`Transaction broadcast📡\nSignature: ${txSignature}`);
-
-      const txBytes = Buffer.from(rawSignedTxBase64, 'base64');
-      const transaction = kit.getTransactionDecoder().decode(txBytes);
-
-      return { transaction };
+      // All retries exhausted
+      throw lastError;
     },
   });
+  // Count transactions in the plan
+  let txCount = 0;
+  const countTxs = (plan: any): void => {
+    if (plan.kind === 'sequential' || plan.kind === 'parallel') {
+      for (const item of plan.plans) countTxs(item);
+    } else if (plan.message) {
+      txCount++;
+    }
+  };
+  countTxs(transactionPlan);
+  console.log(`Transaction plan contains ${txCount} transactions`);
+
   console.log('Executing transaction plan...');
   try {
     await transactionPlanExecutor(transactionPlan);
