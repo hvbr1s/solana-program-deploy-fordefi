@@ -59,7 +59,8 @@ export async function signWithFordefi(
       push_mode: "manual", // the planExecutor will push the tx for us to our custom RPC
       chain: "solana_devnet",
       data: base64EncodedData,
-      signatures: signatures
+      signatures: signatures,
+      skip_prediction: true // speeds up signing but causes policy mismatch
     }
   };
 

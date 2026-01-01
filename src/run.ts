@@ -48,18 +48,52 @@ async function main(): Promise<void> {
   } catch (error: any) {
     console.error('\n❌ Transaction execution failed\n');
 
+    // get root cause issue
+    const getRootCause = (err: any): any => {
+      let current = err;
+      while (current?.cause) {
+        current = current.cause;
+      }
+      return current;
+    };
+
+    const rootCause = getRootCause(error);
+    console.error('─'.repeat(50));
+    console.error('ROOT CAUSE:', rootCause?.message || 'Unknown error');
+    console.error('─'.repeat(50));
+
     if (kit.isSolanaError(error, kit.SOLANA_ERROR__INSTRUCTION_PLANS__FAILED_TO_EXECUTE_TRANSACTION_PLAN)) {
       const result = error.context.transactionPlanResult as kit.TransactionPlanResult;
-      console.error('Transaction plan result:', JSON.stringify(result, null, 2));
+      const summarizePlan = (plan: any, depth = 0): void => {
+        const indent = '  '.repeat(depth);
+        if (plan.kind === 'sequential' || plan.kind === 'parallel') {
+          console.error(`${indent}${plan.kind.toUpperCase()} plan:`);
+          for (const item of plan.plans) {
+            summarizePlan(item, depth + 1);
+          }
+        } else if (plan.status) {
+          const statusIcon = plan.status.kind === 'success' ? '✅' :
+                            plan.status.kind === 'canceled' ? '⏹️' : '❌';
+          const feePayer = plan.message?.feePayer?.address?.slice(0, 8) || 'unknown';
+          console.error(`${indent}${statusIcon} Transaction (feePayer: ${feePayer}...): ${plan.status.kind}`);
+        }
+      };
+
+      console.error('\nTransaction Plan Summary:');
+      summarizePlan(result);
     }
-    if (error.cause) {
-      console.error('\nCause:', error.cause.message || error.cause);
-      if (error.cause.context) {
-        console.error('Cause context:', JSON.stringify(error.cause.context, null, 2));
-      }
-    }
-    if (error.context?.__code) {
-      console.error('\nError code:', error.context.__code);
+
+    // Show simulation logs if available
+    const findLogs = (err: any): string[] | null => {
+      if (err?.context?.logs?.length > 0) return err.context.logs;
+      if (err?.cause) return findLogs(err.cause);
+      return null;
+    };
+
+    const logs = findLogs(error);
+    if (logs && logs.length > 0) {
+      console.error('\nSimulation Logs:');
+      logs.forEach((log: string) => console.error(`  ${log}`));
     }
 
     throw error;
