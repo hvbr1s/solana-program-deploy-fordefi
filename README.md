@@ -31,7 +31,7 @@ All deployment settings are centralized in `src/config.ts`:
 | `bufferKeypairPath` | `./buffer-keypair.json` | Path to the buffer account keypair |
 | `programKeypairPath` | `./program-keypair.json` | Path to the program ID keypair |
 | `programBinaryPath` | `./target/deploy/solana_deploy_contract_fordefi.so` | Path to compiled program binary |
-| `defaultFeeLamports` | `5000` | Custom fee per transaction in lamports. **Critical** to prevent Fordefi's fee estimation from charging ~0.07 SOL per tx (which would cost 15+ SOL for 212 write transactions). 5000 lamports = 0.000005 SOL (Solana's base fee). |
+| `defaultFeeLamports` | `5000` | Custom fee per transaction in lamports. **Critical** to prevent Fordefi's fee estimation from overcharging per tx. 5000 lamports = 0.000005 SOL (Solana's base fee). |
 | `rpc` | `https://api.devnet.solana.com` | Solana RPC endpoint |
 | `ws` | `wss://api.devnet.solana.com` | Solana WebSocket endpoint |
 
@@ -83,13 +83,13 @@ anchor build
 npx tsx src/run.ts
 ```
 
-## Key Learnings & Gotchas
+## Notable Gotchas
 
 ### 1. Custom Fees are CRITICAL
 
 **Problem:** Fordefi's default fee estimation was charging ~0.07 SOL per transaction. With 212+ write transactions, this resulted in ~15 SOL in fees alone!
 
-**Solution:** Always pass custom fees to Fordefi. In `src/signers.ts`:
+**Solution:** Always pass a `defaultFeeLamports` field to the Fordefi config object in `src/config.ts`:
 
 ```typescript
 const jsonBody = {
@@ -98,39 +98,13 @@ const jsonBody = {
     // ... other fields
     fee: {
       type: "custom",
-      unit_price: "5000"  // 5000 lamports = 0.000005 SOL (base fee)
+      unit_price: feeLamports  // 5000 lamports is usually enough = 0.000005 SOL (base fee)
     }
   }
 };
 ```
 
-**Expected costs with custom fees:**
-- Transaction fees: ~0.001 SOL (212 txs × 5000 lamports)
-- Buffer rent: ~1.33 SOL (recovered after deployment)
-- Program data rent: ~1.4 SOL
-- **Total: ~2.7 SOL** (vs 15+ SOL without custom fees)
-
-### 2. Blockhash Expiry with Long Deployments
-
-**Problem:** Blockhashes expire after ~60-90 seconds. With 212 transactions and Fordefi's MPC signing taking 2-5 seconds each, later transactions fail with "Blockhash not found".
-
-**Solution:** Implement retry logic that gets a fresh blockhash on each retry:
-
-```typescript
-for (let attempt = 1; attempt <= maxRetries; attempt++) {
-  try {
-    const rawSignedTxBase64 = await signWithFordefi(message, rpc);
-    // ... send transaction
-  } catch (error) {
-    if (errorMsg.includes('Blockhash not found')) {
-      continue;  // Retry with fresh blockhash
-    }
-    throw error;
-  }
-}
-```
-
-### 3. Buffer Cleanup After Failed Deployments
+### 2. Buffer Cleanup After Failed Deployments
 
 **Problem:** If deployment fails mid-way, the buffer account holds ~1.33 SOL that won't be automatically recovered.
 
@@ -138,10 +112,10 @@ for (let attempt = 1; attempt <= maxRetries; attempt++) {
 
 ```bash
 # Close a specific buffer
-npx tsx src/close-buffer.ts BUFFER_ADDRESS
+npx tsx src/utils/close-buffer-util.ts BUFFER_ADDRESS
 
 # Example
-npx tsx src/close-buffer.ts BY7zjwvhKgwTUwyGh8dBCPki7dRSjhTjcC46wMdfL9YM
+npx tsx src/utils/close-buffer-util.ts BY7zjwvhKgwTUwyGh8dBCPki7dRSjhTjcC46wMdfL9YM
 ```
 
 This will:
@@ -150,28 +124,7 @@ This will:
 3. Close the buffer via Fordefi signing
 4. Return the rent (~1.33 SOL) to your vault
 
-### 4. Do NOT Apply Padding Fix to Write Instructions
-
-**Problem:** There was a commented-out "fix" that added 4 bytes of padding to write instructions. This corrupted the program data and caused "Failed to parse ELF file: invalid file header" errors.
-
-**Solution:** Use write instructions directly without modification:
-
-```typescript
-// WRONG - corrupts program data
-const fixedWriteIxs = writeBufferIxs.map(ix => {
-  const newData = new Uint8Array([
-    ...ix.data!.subarray(0, 12),
-    ...[0, 0, 0, 0],  // BAD: corrupts ELF header
-    ...ix.data!.subarray(12, ix.data!.length)
-  ]);
-  return { ...ix, data: newData };
-});
-
-// CORRECT - use instructions as-is
-ixs.push(...writeBufferIxs);
-```
-
-### 5. Fresh Keypairs for Each Deployment Attempt
+### 3. Fresh Keypairs for Each Deployment Attempt
 
 **Problem:** Reusing keypairs from failed deployments causes "account already in use" errors.
 

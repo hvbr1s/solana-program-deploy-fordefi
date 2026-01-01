@@ -1,7 +1,7 @@
 import * as kit from '@solana/kit';
 import { fordefiConfig } from '../config';
 import { signWithFordefi } from '../signers';
-import { createClient } from "./solana-client-utils";
+import { createClient } from "./solana-client-util";
 import * as loader from '@solana-program/loader-v3';
 
 // this is a utility script to close buffers in case of a failed deployment

@@ -8,7 +8,7 @@ export async function signPayloadWithApiUserPrivateKey(payload: string, privateK
   const privateKey = crypto.createPrivateKey(privateKeyPem);
   const sign = crypto.createSign('SHA256').update(payload, 'utf8').end();
   const signature = sign.sign(privateKey, 'base64');
-  console.log("Payload signed by API User private key 🖋️✅")
+  console.log("Payload signed by API User private key 🖋️✅");
 
   return signature
 }
@@ -73,7 +73,6 @@ export async function signWithFordefi(
   const timestamp = new Date().getTime();
   const payload = `${fordefiConfig.apiPathEndpoint}|${timestamp}|${requestBody}`;
 
-  // sign with API User private key and send to Fordefi for MPC signing
   const signature = await signPayloadWithApiUserPrivateKey(payload, fordefiConfig.privateKeyPem);
   const response = await postTx(fordefiConfig, signature, timestamp, requestBody);
   const txId = response.data.id;

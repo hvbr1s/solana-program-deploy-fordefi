@@ -1,7 +1,7 @@
 import fs from 'fs';
 import * as kit from '@solana/kit';
 import { FordefiSolanaConfig } from './config';
-import { Client } from './utils/solana-client-utils';
+import { Client } from './utils/solana-client-util';
 import * as system from '@solana-program/system';
 import * as loader from '@solana-program/loader-v3';
 

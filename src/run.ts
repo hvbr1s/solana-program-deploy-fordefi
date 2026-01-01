@@ -2,7 +2,7 @@ import * as kit from '@solana/kit';
 import { fordefiConfig } from './config';
 import { createTxPlan } from './tx-planner';
 import { signWithFordefi } from './signers';
-import { createClient, Client } from "./utils/solana-client-utils";
+import { createClient, Client } from "./utils/solana-client-util";
 
 async function main(): Promise<void> {
   if (!fordefiConfig.accessToken) {
@@ -12,7 +12,7 @@ async function main(): Promise<void> {
   const solana_client: Client = await createClient();
   const transactionPlan = await createTxPlan(fordefiConfig, solana_client);
 
-  // tx counter for tracking progress
+  // current tx counter for tracking progress
   let currentTx = 0;
 
   // create executor that uses Fordefi for signing with retry logic
