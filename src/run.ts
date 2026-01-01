@@ -2,7 +2,7 @@ import * as kit from '@solana/kit';
 import { fordefiConfig } from './config';
 import { createTxPlan } from './tx-planner';
 import { signWithFordefi } from './signers';
-import { createClient, Client } from "./solana-client-utils";
+import { createClient, Client } from "./utils/solana-client-utils";
 
 async function main(): Promise<void> {
   if (!fordefiConfig.accessToken) {
@@ -12,10 +12,10 @@ async function main(): Promise<void> {
   const solana_client: Client = await createClient();
   const transactionPlan = await createTxPlan(fordefiConfig, solana_client);
 
-  // Track transaction count for progress
+  // tx counter for tracking progress
   let currentTx = 0;
 
-  // Create executor that uses Fordefi for signing with retry logic
+  // create executor that uses Fordefi for signing with retry logic
   const transactionPlanExecutor = kit.createTransactionPlanExecutor({
     executeTransactionMessage: async (
       message: kit.BaseTransactionMessage & kit.TransactionMessageWithFeePayer,
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
         try {
           console.log(`\n[TX ${currentTx}] Signing with Fordefi (attempt ${attempt}/${maxRetries})...`);
 
-          // Sign with Fordefi (gets fresh blockhash each attempt)
+          // sign with Fordefi (we get a fresh blockhash for each attempt)
           const rawSignedTxBase64 = await signWithFordefi(message, solana_client.rpc);
           console.log(`[TX ${currentTx}] Signed by Fordefi MPC 🖋️✅`);
 
@@ -52,22 +52,17 @@ async function main(): Promise<void> {
           lastError = error;
           const errorMsg = error?.cause?.message || error?.message || '';
 
-          // Check if it's a blockhash expiry error
           if (errorMsg.includes('Blockhash not found') || errorMsg.includes('blockhash')) {
             console.log(`[TX ${currentTx}] Blockhash expired, retrying with fresh blockhash...`);
             continue;
           }
-
-          // For other errors, throw immediately
           throw error;
         }
       }
-
-      // All retries exhausted
       throw lastError;
     },
   });
-  // Count transactions in the plan
+  // tx plan counter
   let txCount = 0;
   const countTxs = (plan: any): void => {
     if (plan.kind === 'sequential' || plan.kind === 'parallel') {
@@ -86,7 +81,6 @@ async function main(): Promise<void> {
   } catch (error: any) {
     console.error('\n❌ Transaction execution failed\n');
 
-    // get root cause issue
     const getRootCause = (err: any): any => {
       let current = err;
       while (current?.cause) {
@@ -120,8 +114,6 @@ async function main(): Promise<void> {
       console.error('\nTransaction Plan Summary:');
       summarizePlan(result);
     }
-
-    // Show simulation logs if available
     const findLogs = (err: any): string[] | null => {
       if (err?.context?.logs?.length > 0) return err.context.logs;
       if (err?.cause) return findLogs(err.cause);

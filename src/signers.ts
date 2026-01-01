@@ -13,10 +13,6 @@ export async function signPayloadWithApiUserPrivateKey(payload: string, privateK
   return signature
 }
 
-// Custom fee in lamports - 5000 lamports = 0.000005 SOL (base fee)
-// For 212 transactions: 212 * 5000 = 1,060,000 lamports = ~0.001 SOL total
-const DEFAULT_FEE_LAMPORTS = "5000";
-
 export async function signWithFordefi(
   message: kit.BaseTransactionMessage & kit.TransactionMessageWithFeePayer,
   rpc: ReturnType<typeof kit.createSolanaRpc>,
@@ -25,7 +21,6 @@ export async function signWithFordefi(
   const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
   const messageWithBlockhash = kit.setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, message);
 
-  // Partially sign with all available signers (local keypairs sign, NoopSigner returns null)
   const partiallySignedTx = await kit.partiallySignTransactionMessageWithSigners(messageWithBlockhash);
   const base64EncodedData = Buffer.from(partiallySignedTx.messageBytes).toString('base64');
 
@@ -34,7 +29,6 @@ export async function signWithFordefi(
   // Subsequent signatures are from local signers
   const signatures: Array<{ data: string | null }> = [];
 
-  // Get the signers from the message in order
   const feePayerAddress = message.feePayer.address;
   const allSignerAddresses = Object.keys(partiallySignedTx.signatures);
 
@@ -54,7 +48,7 @@ export async function signWithFordefi(
 
   console.log(`Signatures array: ${signatures.length} entries (1 Fordefi + ${signatures.length - 1} local)`);
 
-  const feeLamports = customFeeLamports || DEFAULT_FEE_LAMPORTS;
+  const feeLamports = customFeeLamports || fordefiConfig.defaultFeeLamports;
 
   const jsonBody = {
     vault_id: fordefiConfig.deployerVaultId,
@@ -70,7 +64,7 @@ export async function signWithFordefi(
       skip_prediction: true, // speeds up signing but causes policy mismatch
       fee: {
         type: "custom",
-        unit_price: feeLamports
+        unit_price: feeLamports // we MUST set custom fees we calculate or Fordefi will overshoot the fee  
       }
     }
   };

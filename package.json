@@ -4,7 +4,7 @@
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
     "deploy": "npx tsx ./src/run.ts",
-    "close-buffer": "npx tsx src/close-buffer.ts",
+    "close-buffer": "npx tsx src/utils/close-buffer-util.ts",
     "build": "anchor build"
   },
   "dependencies": {

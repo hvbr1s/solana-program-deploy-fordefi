@@ -1,7 +1,7 @@
 import fs from 'fs';
 import * as kit from '@solana/kit';
 import { FordefiSolanaConfig } from './config';
-import { Client } from './solana-client-utils';
+import { Client } from './utils/solana-client-utils';
 import * as system from '@solana-program/system';
 import * as loader from '@solana-program/loader-v3';
 
@@ -10,15 +10,15 @@ export async function createTxPlan(fordefiConfig: FordefiSolanaConfig, client: C
     const deployerVault = kit.address(fordefiConfig.deployerVaultAddress);
     const deployerVaultSigner = kit.createNoopSigner(deployerVault);
 
-    // Load buffer keypair
-    const bufferKeypairBytes = new Uint8Array(JSON.parse(fs.readFileSync('buffer-keypair.json', 'utf-8')));
+    // Load buffer account keypair
+    const bufferKeypairBytes = new Uint8Array(JSON.parse(fs.readFileSync(fordefiConfig.bufferKeypairPath, 'utf-8')));
     const bufferSigner = await kit.createKeyPairSignerFromBytes(bufferKeypairBytes);
 
     // Load program keypair (the program ID)
-    const programKeypairBytes = new Uint8Array(JSON.parse(fs.readFileSync('program-keypair.json', 'utf-8')));
+    const programKeypairBytes = new Uint8Array(JSON.parse(fs.readFileSync(fordefiConfig.programKeypairPath, 'utf-8')));
     const programSigner = await kit.createKeyPairSignerFromBytes(programKeypairBytes);
 
-    const dataSize = new Uint8Array(fs.readFileSync('target/deploy/solana_deploy_contract_fordefi.so'))
+    const dataSize = new Uint8Array(fs.readFileSync(fordefiConfig.programBinaryPath))
     console.log(`Data size: ${dataSize.length}`)
 
     const bufferSize = dataSize.length+37; // 37 is the Buffer header size
@@ -60,38 +60,22 @@ export async function createTxPlan(fordefiConfig: FordefiSolanaConfig, client: C
       offset += chunkSize;
     }
 
-    // NOTE: The following padding fix was causing "Failed to parse ELF file: invalid file header" errors
-    // It was corrupting the program data by inserting 4 zero bytes at position 12.
-    // Keeping commented out for reference in case loader-v3 library issues arise.
-    // const fixedWriteIxs = writeBufferIxs.map(ix => {
-    //   const newData = new Uint8Array([
-    //     ...ix.data!.subarray(0, 12),
-    //     ...[0, 0, 0, 0],
-    //     ...ix.data!.subarray(12, ix.data!.length)
-    //   ]);
-    //   return { ...ix, data: newData };
-    // });
-    // ixs.push(...fixedWriteIxs);
-
-    // Add write instructions directly (no padding fix needed)
     ixs.push(...writeBufferIxs);
 
     // Deploy the buffer to a program
-    // maxDataLen - add some buffer for future upgrades
+    // we add some buffer for future upgrades
     const maxDataLen = dataSize.length + 10000;
 
-    // Program account size (36 bytes for UpgradeableLoaderState::Program)
     const PROGRAM_ACCOUNT_SIZE = 36;
     const programAccountRent = await client.rpc.getMinimumBalanceForRentExemption(BigInt(PROGRAM_ACCOUNT_SIZE)).send();
     console.log(`Program account rent: ${Number(programAccountRent) / 1e9} SOL for ${PROGRAM_ACCOUNT_SIZE} bytes`);
 
-    // Derive the programData PDA (seeds: [program_address])
     const [programDataAddress] = await kit.getProgramDerivedAddress({
       programAddress: kit.address(loader.LOADER_V3_PROGRAM_ADDRESS),
       seeds: [kit.getAddressEncoder().encode(programSigner.address)],
     });
 
-    // Create program account first
+    // create program account
     const createProgramAccount = system.getCreateAccountInstruction({
       newAccount: programSigner,
       payer: deployerVaultSigner,
@@ -100,7 +84,7 @@ export async function createTxPlan(fordefiConfig: FordefiSolanaConfig, client: C
       lamports: programAccountRent,
     });
 
-    // Deploy instruction
+    // deploy the program
     const deployInstruction = loader.getDeployWithMaxDataLenInstruction({
       authority: deployerVaultSigner,
       bufferAccount: bufferSigner.address,

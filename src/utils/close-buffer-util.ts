@@ -1,6 +1,6 @@
 import * as kit from '@solana/kit';
-import { fordefiConfig } from './config';
-import { signWithFordefi } from './signers';
+import { fordefiConfig } from '../config';
+import { signWithFordefi } from '../signers';
 import { createClient } from "./solana-client-utils";
 import * as loader from '@solana-program/loader-v3';
 

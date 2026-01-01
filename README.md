@@ -4,10 +4,11 @@ This project demonstrates how to deploy Solana (Anchor) programs using Fordefi's
 
 ## Prerequisites
 
-- Node.js 18+
-- Rust and Solana CLI tools
-- Anchor CLI (`anchor-cli`)
-- Fordefi API access with a configured Solana vault
+1. **Fordefi API Setup**: Complete the [API Signer setup guide](https://docs.fordefi.com/developers/getting-started/set-up-an-api-signer/api-signer-docker)
+2. **Node.js 18+**
+3. **Rust and Solana CLI tools**
+4. **Anchor CLI** (`anchor-cli`)
+5. **Fordefi Solana vault** with sufficient devnet/mainnet SOL
 
 ## Environment Setup
 
@@ -20,6 +21,19 @@ FORDEFI_VAULT_ADDRESS=your_solana_vault_address
 ```
 
 Place your Fordefi API user private key at `./fordefi_secret/private.pem`.
+
+## Configuration
+
+All deployment settings are centralized in `src/config.ts`:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `bufferKeypairPath` | `./buffer-keypair.json` | Path to the buffer account keypair |
+| `programKeypairPath` | `./program-keypair.json` | Path to the program ID keypair |
+| `programBinaryPath` | `./target/deploy/solana_deploy_contract_fordefi.so` | Path to compiled program binary |
+| `defaultFeeLamports` | `5000` | Custom fee per transaction in lamports. **Critical** to prevent Fordefi's fee estimation from charging ~0.07 SOL per tx (which would cost 15+ SOL for 212 write transactions). 5000 lamports = 0.000005 SOL (Solana's base fee). |
+| `rpc` | `https://api.devnet.solana.com` | Solana RPC endpoint |
+| `ws` | `wss://api.devnet.solana.com` | Solana WebSocket endpoint |
 
 ## Project Structure
 

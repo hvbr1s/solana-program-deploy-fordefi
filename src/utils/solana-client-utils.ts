@@ -1,5 +1,11 @@
-import { Rpc, RpcSubscriptions, SolanaRpcApi, SolanaRpcSubscriptionsApi, createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit';
-import { fordefiConfig } from './config'; 
+import { 
+    Rpc, 
+    RpcSubscriptions, 
+    SolanaRpcApi, 
+    SolanaRpcSubscriptionsApi, 
+    createSolanaRpc, 
+    createSolanaRpcSubscriptions } from '@solana/kit';
+import { fordefiConfig } from '../config'; 
 
 export type Client = {
     rpc: Rpc<SolanaRpcApi>;
